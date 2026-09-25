@@ -1,0 +1,52 @@
+# Builds the SageFit Android app on GitHub's free cloud computers.
+# Open the "Actions" tab, pick the latest run, and download "SageFit-app"
+# at the bottom. Inside is SageFit.apk.
+name: Build SageFit app
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write   # lets the first build save the test signing key and icon
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: App icon and test signing key (made once, then saved in the repo)
+        run: |
+          ICON=app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          KEY=app/sagefit-debug.keystore
+          CHANGED=0
+          if [ ! -f "$ICON" ]; then
+            mkdir -p "$(dirname "$ICON")"
+            curl -fsSL -o "$ICON" https://sagefitfitnesstracker.netlify.app/icon-192.png
+            CHANGED=1
+          fi
+          if [ ! -f "$KEY" ]; then
+            keytool -genkeypair -keystore "$KEY" -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=SageFit Debug,O=SageFit,C=US"
+            CHANGED=1
+          fi
+          if [ "$CHANGED" = 1 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+            git add -f "$ICON" "$KEY"
+            git commit -m "Add app icon and test signing key"
+            git push
+          fi
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Build the app
+        run: gradle assembleDebug --stacktrace
+      - name: Rename
+        run: cp app/build/outputs/apk/debug/app-debug.apk SageFit.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SageFit-app
+          path: SageFit.apk
