@@ -5,12 +5,13 @@ plugins {
 
 android {
     namespace = "org.sagefit.app"
-    compileSdk = 34
+    compileSdk = 36
     defaultConfig {
         applicationId = "org.sagefit.app"
         minSdk = 26                 // Health Connect needs Android 8.0+
-        targetSdk = 34
-        versionCode = 1
+        targetSdk = 36                // Google Play requires Android 16 (API 36) for new apps
+        // The Google Play build sets VERSION_CODE so every upload gets a higher number.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = "1.0"
     }
     // One fixed test key, so each new GitHub build installs as an UPDATE over the old one
@@ -22,10 +23,24 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Google Play upload key. It is NOT stored in the repository: the "Build SageFit for
+        // Google Play" workflow reads it from the repository's secrets (see PLAY-STORE-GUIDE.txt).
+        create("upload") {
+            System.getenv("UPLOAD_KEYSTORE_FILE")?.let { path ->
+                storeFile = file(path)
+                storeType = "pkcs12"
+                storePassword = System.getenv("UPLOAD_KEY_PASSWORD")
+                keyAlias = "upload"
+                keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("debug") { signingConfig = signingConfigs.getByName("debug") }
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            if (System.getenv("UPLOAD_KEYSTORE_FILE") != null) signingConfig = signingConfigs.getByName("upload")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

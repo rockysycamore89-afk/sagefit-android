@@ -10,7 +10,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -20,6 +23,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -48,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private var geoCallback: GeolocationPermissions.Callback? = null
     private var geoOrigin: String? = null
     private var pendingDays = 7
+    private var cameraRequest: PermissionRequest? = null
     private val live = Handler(Looper.getMainLooper())
     private val liveTick = object : Runnable {       // while SageFit is on screen, refresh steps every 30 seconds
         override fun run() { readSteps(1, fromTimer = true); live.postDelayed(this, 30_000) }
@@ -72,6 +79,11 @@ class MainActivity : ComponentActivity() {
         PermissionController.createRequestPermissionResultContract()
     ) { readSteps(pendingDays) }
 
+    private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        cameraRequest?.let { if (ok) it.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else it.deny() }
+        cameraRequest = null
+    }
+
     private val askLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         val ok = r[Manifest.permission.ACCESS_FINE_LOCATION] == true || r[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         geoCallback?.invoke(geoOrigin, ok, false); geoCallback = null
@@ -81,7 +93,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         web = WebView(this)
-        setContentView(web)
+        // Android 15 and newer draw apps edge to edge. Keep SageFit clear of the status bar,
+        // camera cutout, navigation bar and keyboard, with a sage strip behind the system bars.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val frame = FrameLayout(this).apply { setBackgroundColor(0xFF52796F.toInt()) }
+        frame.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(frame)
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true          // SageFit saves everything on the phone
         web.settings.databaseEnabled = true
@@ -100,6 +123,17 @@ class MainActivity : ComponentActivity() {
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
                 geoOrigin = origin; geoCallback = callback
                 askLocation.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+            // The barcode scanner asks for the camera. Only SageFit's own pages may use it.
+            override fun onPermissionRequest(request: PermissionRequest) = runOnUiThread {
+                val wantsCamera = PermissionRequest.RESOURCE_VIDEO_CAPTURE in request.resources
+                if (!wantsCamera || request.origin.host != Uri.parse(SITE).host) { request.deny(); return@runOnUiThread }
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                } else {
+                    cameraRequest = request
+                    askCamera.launch(Manifest.permission.CAMERA)
+                }
             }
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.SageFit" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">#52796F</item>
-        <item name="android:navigationBarColor">#FEFAE0</item>
+        <item name="android:navigationBarColor">#52796F</item>
         <item name="android:windowBackground">#FEFAE0</item>
     </style>
 </resources>
