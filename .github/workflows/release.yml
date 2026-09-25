@@ -1,0 +1,46 @@
+# Builds the signed SageFit bundle (.aab) to upload to Google Play.
+# Run it from the Actions tab: "Build SageFit for Google Play" -> "Run workflow".
+# It needs two repository secrets first (see PLAY-STORE-GUIDE.txt):
+#   UPLOAD_KEYSTORE_B64   the upload key file, as text
+#   UPLOAD_KEY_PASSWORD   its password
+name: Build SageFit for Google Play
+on:
+  workflow_dispatch:
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Unpack the upload key
+        env:
+          KEY_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEY_B64" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add the UPLOAD_KEYSTORE_B64 and UPLOAD_KEY_PASSWORD secrets first (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          printf '%s' "$KEY_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/upload.p12"
+      - name: Build the Google Play bundle
+        env:
+          UPLOAD_KEYSTORE_FILE: ${{ runner.temp }}/upload.p12
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          export VERSION_CODE=$((10 + GITHUB_RUN_NUMBER))   # goes up by one with every run
+          echo "Version code: $VERSION_CODE"
+          gradle bundleRelease --stacktrace
+          cp app/build/outputs/bundle/release/app-release.aab SageFit-play.aab
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.p12"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SageFit-for-Google-Play
+          path: SageFit-play.aab
