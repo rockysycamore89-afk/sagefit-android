@@ -7,7 +7,7 @@ android {
     namespace = "org.sagefit.app"
     compileSdk = 36
     defaultConfig {
-        applicationId = "org.sagefit.app"
+        applicationId = "com.veteransyard.sagefit"   // the package name registered in Google Play Console
         minSdk = 26                 // Health Connect needs Android 8.0+
         targetSdk = 36                // Google Play requires Android 16 (API 36) for new apps
         // The Google Play build sets VERSION_CODE so every upload gets a higher number.
