@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.net.Uri
 import android.os.Bundle
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
     companion object { const val SITE = "https://sagefitfitnesstracker.netlify.app/" }
 
     private lateinit var web: WebView
+    private lateinit var frame: FrameLayout
     private val stepsPermission = setOf(HealthPermission.getReadPermission(StepsRecord::class))
     private var geoCallback: GeolocationPermissions.Callback? = null
     private var geoOrigin: String? = null
@@ -96,7 +98,7 @@ class MainActivity : ComponentActivity() {
         // Android 15 and newer draw apps edge to edge. Keep SageFit clear of the status bar,
         // camera cutout, navigation bar and keyboard, with a sage strip behind the system bars.
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        val frame = FrameLayout(this).apply { setBackgroundColor(0xFF52796F.toInt()) }
+        frame = FrameLayout(this).apply { setBackgroundColor(savedBarColor()) }   // Sage, or the last Look the person picked
         frame.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(frame)
         ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
@@ -160,6 +162,12 @@ class MainActivity : ComponentActivity() {
             if (on) { if (StepWorker.canCount(this@MainActivity)) startAlwaysOn() else askMotion.launch(Manifest.permission.ACTIVITY_RECOGNITION) }
             else StepService.stop(this@MainActivity)
         }
+        /** The page's Look setting (Sage or Lavender): color the strips behind the status and navigation bars to match. */
+        @JavascriptInterface fun setThemeColor(hex: String) = runOnUiThread {
+            val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return@runOnUiThread
+            frame.setBackgroundColor(color)
+            getSharedPreferences("sagefit_look", MODE_PRIVATE).edit().putInt("bar_color", color).apply()
+        }
         @JavascriptInterface fun requestPermission() = runOnUiThread { askHealthConnect() }
         @JavascriptInterface fun requestSteps(days: Int) = runOnUiThread { askForSteps(days.coerceIn(1, 30)) }
         /** Opens the battery settings so the phone doesn't pause SageFit's 15-minute step saves. */
@@ -168,6 +176,9 @@ class MainActivity : ComponentActivity() {
                 .onFailure { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
         }
     }
+
+    private fun savedBarColor(): Int =
+        getSharedPreferences("sagefit_look", MODE_PRIVATE).getInt("bar_color", ContextCompat.getColor(this, R.color.sage_primary))
 
     /** First makes sure SageFit may use the step-counter chip, then reads steps. */
     private fun askForSteps(days: Int) {

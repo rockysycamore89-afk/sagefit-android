@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sage (default look) -->
+    <color name="sage_primary">#52796F</color>       <!-- Sage green: system bars -->
+    <color name="sage_cream">#FEFAE0</color>         <!-- Warm cream background -->
+
+    <!-- Lavender Theme Palette (from Nova). The app switches to it from Settings > This phone > Look. -->
+    <color name="lavender_dark">#2E2A36</color>       <!-- Deep dark background -->
+    <color name="lavender_surface">#3D3747</color>    <!-- Card/Container surface -->
+    <color name="lavender_primary">#9D8EC2</color>    <!-- Soft calming lavender -->
+    <color name="lavender_accent">#C8BFE7</color>     <!-- Light highlight lavender -->
+    <color name="lavender_cream">#F7F4FA</color>      <!-- Text/icon light cream -->
+    <color name="lavender_terracotta">#D98880</color> <!-- Accent pill / alert -->
+</resources>
