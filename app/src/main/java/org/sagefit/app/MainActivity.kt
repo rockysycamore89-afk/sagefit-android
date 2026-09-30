@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
@@ -86,10 +87,17 @@ class MainActivity : ComponentActivity() {
         cameraRequest = null
     }
 
+    // Location permission (from Nova's version): tell the web page's GPS request whether it was granted,
+    // and remember the answer so SageFit doesn't ask again on every workout.
     private val askLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         val ok = r[Manifest.permission.ACCESS_FINE_LOCATION] == true || r[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        geoCallback?.invoke(geoOrigin, ok, false); geoCallback = null
+        geoCallback?.invoke(geoOrigin, ok, ok)
+        geoCallback = null; geoOrigin = null
     }
+
+    private fun hasLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +131,8 @@ class MainActivity : ComponentActivity() {
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+                if (Uri.parse(origin).host != Uri.parse(SITE).host) { callback.invoke(origin, false, false); return }
+                if (hasLocation()) { callback.invoke(origin, true, true); return }   // already allowed: no second prompt
                 geoOrigin = origin; geoCallback = callback
                 askLocation.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             }
@@ -167,6 +177,11 @@ class MainActivity : ComponentActivity() {
             val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return@runOnUiThread
             frame.setBackgroundColor(color)
             getSharedPreferences("sagefit_look", MODE_PRIVATE).edit().putInt("bar_color", color).apply()
+        }
+        /** Keeps the screen on only while a GPS workout or the in-app step counter is running. */
+        @JavascriptInterface fun keepScreenOn(on: Boolean) = runOnUiThread {
+            if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         @JavascriptInterface fun requestPermission() = runOnUiThread { askHealthConnect() }
         @JavascriptInterface fun requestSteps(days: Int) = runOnUiThread { askForSteps(days.coerceIn(1, 30)) }
