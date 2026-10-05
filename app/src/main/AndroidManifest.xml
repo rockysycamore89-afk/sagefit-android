@@ -15,6 +15,8 @@
     <!-- Always-on counting: a quiet notification keeps Android (and Samsung's battery manager) from pausing SageFit -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <!-- GPS workouts: keeps recording with the screen off, only between Start and Finish (no background location) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -44,6 +46,12 @@
             android:name=".StepService"
             android:exported="false"
             android:foregroundServiceType="health" />
+
+        <!-- Records a GPS workout the person started, with a notification, until they tap Finish -->
+        <service
+            android:name=".WorkoutService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- Turns the step counter back on after the phone restarts -->
         <receiver android:name=".BootReceiver" android:exported="true">
