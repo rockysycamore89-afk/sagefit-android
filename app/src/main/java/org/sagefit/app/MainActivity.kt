@@ -95,6 +95,30 @@ class MainActivity : ComponentActivity() {
         geoCallback = null; geoOrigin = null
     }
 
+    // GPS workouts: ask for Location (and, on Android 13+, the notification) when the person taps Start.
+    private var workoutJson: String? = null
+    private val askWorkoutLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        val json = workoutJson ?: return@registerForActivityResult
+        if (r.values.any { it }) startWorkoutNow(json) else WorkoutService.start(this, json)   // start() reports "denied" to the page
+    }
+    private val askWorkoutNotify = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        workoutJson?.let { WorkoutService.start(this, it) }      // the workout runs either way; the notification just shows it
+        workoutJson = null
+    }
+    private fun startWorkout(json: String) {
+        workoutJson = json
+        if (!hasLocation()) askWorkoutLocation.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        else startWorkoutNow(json)
+    }
+    private fun startWorkoutNow(json: String) {
+        if (Build.VERSION.SDK_INT >= 33 && !getSharedPreferences("sagefit_look", MODE_PRIVATE).getBoolean("asked_workout_note", false) &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            getSharedPreferences("sagefit_look", MODE_PRIVATE).edit().putBoolean("asked_workout_note", true).apply()
+            workoutJson = json; askWorkoutNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else { WorkoutService.start(this, json); workoutJson = null }
+    }
+
     private fun hasLocation(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -183,6 +207,10 @@ class MainActivity : ComponentActivity() {
             if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+        /** GPS workouts: Start, the page's pick-up of saved fixes, and Finish/Discard. */
+        @JavascriptInterface fun startWorkout(json: String) = runOnUiThread { this@MainActivity.startWorkout(json) }
+        @JavascriptInterface fun workoutPoints(from: Int): String = WorkoutService.points(from)
+        @JavascriptInterface fun stopWorkout() = runOnUiThread { WorkoutService.stop(this@MainActivity) }
         @JavascriptInterface fun requestPermission() = runOnUiThread { askHealthConnect() }
         @JavascriptInterface fun requestSteps(days: Int) = runOnUiThread { askForSteps(days.coerceIn(1, 30)) }
         /** Opens the battery settings so the phone doesn't pause SageFit's 15-minute step saves. */
